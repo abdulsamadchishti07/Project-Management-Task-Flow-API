@@ -106,17 +106,17 @@ def test_member_user(db_session):
 
 @pytest.fixture
 def auth_headers(test_user):
-    token = oauth2.create_access_token(data={"sub": str(test_user.id)})
+    token = oauth2.create_access_token(data={"sub": str(test_user.id), "ver": test_user.token_version or 1})
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def viewer_headers(test_viewer_user):
-    token = oauth2.create_access_token(data={"sub": str(test_viewer_user.id)})
+    token = oauth2.create_access_token(data={"sub": str(test_viewer_user.id), "ver": test_viewer_user.token_version or 1})
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def member_headers(test_member_user):
-    token = oauth2.create_access_token(data={"sub": str(test_member_user.id)})
+    token = oauth2.create_access_token(data={"sub": str(test_member_user.id), "ver": test_member_user.token_version or 1})
     return {"Authorization": f"Bearer {token}"}
