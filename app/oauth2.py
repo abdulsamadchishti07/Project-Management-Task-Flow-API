@@ -43,15 +43,21 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str | None = payload.get("sub")
-        if user_id is None:
+        user_id_raw = payload.get("sub")
+        if user_id_raw is None:
             raise credentials_exception
-    except JWTError:
+        user_id = int(user_id_raw)
+        token_ver = payload.get("ver")
+    except (JWTError, ValueError, TypeError):
         raise credentials_exception
 
-    user = db.query(model.Users).filter(model.Users.id == int(user_id)).first()
+    user = db.query(model.Users).filter(model.Users.id == user_id).first()
     if user is None:
         raise credentials_exception
+
+    if token_ver is None or token_ver != user.token_version:
+        raise credentials_exception
+
     return user
 
 
@@ -78,10 +84,16 @@ async def get_optional_current_user(
         return None
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str | None = payload.get("sub")
-        if user_id is None:
+        user_id_raw = payload.get("sub")
+        if user_id_raw is None:
             return None
-        user = db.query(model.Users).filter(model.Users.id == int(user_id)).first()
-        return user if (user and user.active) else None
-    except JWTError:
+        user_id = int(user_id_raw)
+        token_ver = payload.get("ver")
+        user = db.query(model.Users).filter(model.Users.id == user_id).first()
+        if not user or not user.active:
+            return None
+        if token_ver is None or token_ver != user.token_version:
+            return None
+        return user
+    except (JWTError, ValueError, TypeError):
         return None

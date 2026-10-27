@@ -15,6 +15,7 @@ class Users(Base):
     active = Column(Boolean, server_default="False", nullable=False)
     verification_otp = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    token_version = Column(Integer, server_default="1", default=1, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
 
