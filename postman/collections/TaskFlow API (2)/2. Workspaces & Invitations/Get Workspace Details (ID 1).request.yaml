@@ -1,4 +1,0 @@
-$kind: http-request
-url: "{{URL}}/workspace/1"
-method: GET
-order: 2000

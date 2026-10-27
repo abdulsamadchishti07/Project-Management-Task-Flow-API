@@ -7,9 +7,9 @@ body:
   type: text
   content: |-
     {
-        "email": "samadseven07@gmail.com",
-        "name": "Abdul Samad",
-        "password": "11111111"
+        "email": "demo@example.com",
+        "name": "Demo User",
+        "password": "REPLACE_WITH_TEST_PASSWORD"
     }
 auth:
   type: noauth

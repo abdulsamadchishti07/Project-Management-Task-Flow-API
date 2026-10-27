@@ -1,5 +1,5 @@
 $kind: collection
-name: TaskFlow API (1)
+name: TaskFlow API
 description: Complete production REST API collection for TaskFlow with auto-token management, RBAC, workspaces, projects, tasks, comments, and invitations.
 auth:
   - id: 8f3fd285-588f-49b0-9eb7-ce40eed29f1e

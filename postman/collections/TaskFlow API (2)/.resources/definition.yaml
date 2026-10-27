@@ -1,9 +1,0 @@
-$kind: collection
-name: TaskFlow API (2)
-description: Pre-configured Postman Collection for abdulsamadchishti07@gmail.com with auto-token management, workspace access, task management, and comments.
-auth:
-  - id: 82b73576-ab6f-4cbf-b70f-e4b0ee86a941
-    type: bearer
-    name: bearer auth
-    credentials:
-      token: "{{TOKEN}}"

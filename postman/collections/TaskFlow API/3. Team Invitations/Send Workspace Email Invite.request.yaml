@@ -1,5 +1,5 @@
 $kind: http-request
-url: "{{URL}}/user/resend-otp"
+url: "{{URL}}/invitations/workspace/1"
 method: POST
 headers:
   Content-Type: application/json
@@ -7,8 +7,7 @@ body:
   type: text
   content: |-
     {
-        "email": "samadseven07@gmail.com"
+        "email": "colleague@example.com",
+        "role": "member"
     }
-auth:
-  type: noauth
-order: 3000
+order: 1000

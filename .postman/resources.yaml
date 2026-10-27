@@ -6,8 +6,7 @@ workspace:
 
 cloudResources:
   collections:
-    ../postman/collections/TaskFlow API (2): 602d9a80-6f25-4d94-bd5f-d5caae9ef479
-    ../postman/collections/TaskFlow API (1): 28e687a2-5d9d-4334-923c-f18510e557c0
+    ../postman/collections/TaskFlow API: 28e687a2-5d9d-4334-923c-f18510e557c0
 
 # All resources in the `postman/` folder are automatically registered in Local View.
 # Point to additional files outside the `postman/` folder to register them individually. Example:

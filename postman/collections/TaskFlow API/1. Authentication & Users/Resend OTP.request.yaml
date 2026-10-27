@@ -1,5 +1,5 @@
 $kind: http-request
-url: "{{URL}}/comments/task/2"
+url: "{{URL}}/user/resend-otp"
 method: POST
 headers:
   Content-Type: application/json
@@ -7,6 +7,8 @@ body:
   type: text
   content: |-
     {
-        "content": "I have completed the task and verified all endpoints!"
+        "email": "demo@example.com"
     }
-order: 1000
+auth:
+  type: noauth
+order: 3000

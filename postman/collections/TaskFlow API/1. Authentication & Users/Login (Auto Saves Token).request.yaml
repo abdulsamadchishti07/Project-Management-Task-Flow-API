@@ -6,8 +6,8 @@ headers:
 body:
   type: urlencoded
   content:
-    username: samadseven07@gmail.com
-    password: "11111111"
+    username: demo@example.com
+    password: "REPLACE_WITH_TEST_PASSWORD"
 auth:
   type: noauth
 scripts:

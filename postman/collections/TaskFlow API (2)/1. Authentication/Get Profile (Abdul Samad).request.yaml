@@ -1,4 +1,0 @@
-$kind: http-request
-url: "{{URL}}/user/me"
-method: GET
-order: 2000

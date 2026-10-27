@@ -1,4 +1,0 @@
-$kind: http-request
-url: "{{URL}}/comments/task/2"
-method: GET
-order: 2000

@@ -7,7 +7,7 @@ body:
   type: text
   content: |-
     {
-        "email": "samadseven07@gmail.com",
+        "email": "demo@example.com",
         "otp": "123456"
     }
 auth:

@@ -1,4 +1,0 @@
-$kind: http-request
-url: "{{URL}}/tasks/project/2"
-method: GET
-order: 1000

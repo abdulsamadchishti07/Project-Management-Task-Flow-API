@@ -1,4 +1,0 @@
-$kind: http-request
-url: "{{URL}}/invitations/me"
-method: GET
-order: 3000
