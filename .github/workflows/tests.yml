@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      SECRET_KEY: ci-only-secret-key-change-me-123456789
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      EMAIL_HOST_USER: test@example.com
+      EMAIL_HOST_PASSWORD: test-only-password
+      DEFAULT_FROM_EMAIL: test@example.com
+      REDIS_URL: redis://localhost:6379/15
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run test suite
+        run: pytest -v

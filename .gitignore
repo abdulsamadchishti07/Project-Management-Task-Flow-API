@@ -1,11 +1,34 @@
-.venv
-__pycache__
-*.pyc
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
 *.pyo
 *.pyd
-.git
-.gitignore
-.env
-.pytest_cache
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage and test artifacts
+.coverage
+htmlcov/
+coverage.xml
+
+# Local databases and logs
+*.db
+*.sqlite
+*.sqlite3
 *.log
 
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

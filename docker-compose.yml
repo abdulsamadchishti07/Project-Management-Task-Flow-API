@@ -5,15 +5,15 @@ services:
     container_name: taskflow_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: project_managment
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-project_managment}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d project_managment"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-project_managment}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,17 +40,11 @@ services:
     restart: always
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://postgres:password123@db:5432/project_managment
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: 64H78283283873873382NCPQPS5C4D6V564v56bv756bdv57fb6n7g8g7n8bbfbd65vf4x65cr4v5rbtxerctv
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
-      EMAIL_HOST_USER: abdulsamadchishti07@gmail.com
-      EMAIL_HOST_PASSWORD: "gqls jkoy cjrx yblp"
-      DEFAULT_FROM_EMAIL: abdulsamadchishti07@gmail.com
-      EMAIL_SMTP_SERVER: smtp.gmail.com
-      EMAIL_SMTP_PORT: 587
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-project_managment}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     depends_on:
       db:
         condition: service_healthy
