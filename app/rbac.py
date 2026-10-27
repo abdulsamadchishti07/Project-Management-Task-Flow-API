@@ -66,7 +66,10 @@ class RequireWorkspaceRole:
         current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
         db: Annotated[Session, Depends(get_db)],
     ) -> model.WorkspaceMember:
-        workspace = db.query(model.Workspace).filter(model.Workspace.id == workspace_id).first()
+        workspace = db.query(model.Workspace).filter(
+            model.Workspace.id == workspace_id,
+            model.Workspace.is_deleted == False
+        ).first()
         if not workspace:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

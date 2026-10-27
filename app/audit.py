@@ -17,20 +17,15 @@ def log_activity(
     details: Optional[str] = None
 ):
     """
-    Creates an immutable audit log entry for team activity tracking.
-    Example:
-        log_activity(db, ws_id, user_id, "TASK_CREATED", "task", task.id, "Created task 'Design UI'")
+    Stages an immutable audit log entry in the current database session.
+    Commits atomically with the caller's business transaction.
     """
-    try:
-        audit_entry = model.AuditLog(
-            workspace_id=workspace_id,
-            user_id=user_id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            details=details
-        )
-        db.add(audit_entry)
-        db.commit()
-    except Exception as e:
-        logger.error(f"Failed to record audit log: {e}")
+    audit_entry = model.AuditLog(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        details=details
+    )
+    db.add(audit_entry)

@@ -1,8 +1,34 @@
 from datetime import datetime
+from enum import Enum
 from pydantic import EmailStr, BaseModel, Field
 
 from pydantic import ConfigDict
 from typing import Optional
+
+
+class WorkspaceRoleInvite(str, Enum):
+    VIEWER = "viewer"
+    MEMBER = "member"
+    ADMIN = "admin"
+
+
+class ProjectRoleInvite(str, Enum):
+    MEMBER = "member"
+    ADMIN = "admin"
+
+
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
+class TaskPriority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
 
     # User
 class UserOut(BaseModel):
@@ -16,15 +42,21 @@ class UserOut(BaseModel):
 
 class UserCreate(BaseModel):
     email: EmailStr
-    name: str
-    password: str = Field(min_length=8, description="Password must be at least 8 characters")
+    name: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=8, max_length=128, description="Password must be between 8 and 128 characters")
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128, description="New password (optional)")
 
     model_config = ConfigDict(from_attributes=True)
 
     # OTP
 class VerifyOTP(BaseModel):
     email: EmailStr
-    otp: str = Field(min_length=6, max_length=6, description="6-digit verification code")
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$", description="6-digit verification code")
 
 class ResendOTP(BaseModel):
     email: EmailStr
@@ -44,7 +76,7 @@ class TokenData(BaseModel):
 # WorkSpace 
 
 class WorkspaceCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
 
 class WorkspaceOut(BaseModel):
     id: int
@@ -66,7 +98,7 @@ class WorkspaceMemberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 class WorkspaceInvitationCreate(BaseModel):
     email: EmailStr
-    role: str = "member"
+    role: WorkspaceRoleInvite = WorkspaceRoleInvite.MEMBER
 
 class WorkspaceInviteOut(BaseModel):
     id: int
@@ -81,8 +113,8 @@ class WorkspaceInviteOut(BaseModel):
     # project
 
 class ProjectCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
     private: Optional[bool] = False
 
 class ProjectOut(BaseModel):
@@ -100,8 +132,8 @@ class ProjectOut(BaseModel):
 
 class ProjectInvitationCreate(BaseModel):
     email: EmailStr
-    project_id: int
-    role: str = "member"
+    project_id: Optional[int] = None
+    role: ProjectRoleInvite = ProjectRoleInvite.MEMBER
 
 class ProjectInviteOut(BaseModel):
     id: int
@@ -117,18 +149,18 @@ class ProjectInviteOut(BaseModel):
 # task
 
 class TasksCreate(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=255)
     description: Optional[str] = None
-    status: Optional[str] = "pending"
-    priority: Optional[str] = "medium"
+    status: Optional[TaskStatus] = TaskStatus.PENDING
+    priority: Optional[TaskPriority] = TaskPriority.MEDIUM
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
 
 class TasksUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
     description: Optional[str] = None
-    status: Optional[str] = None
-    priority: Optional[str] = None
+    status: Optional[TaskStatus] = None
+    priority: Optional[TaskPriority] = None
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
 
@@ -149,7 +181,7 @@ class TasksOut(BaseModel):
 # comments
 
 class CommentsCreate(BaseModel):
-    content: str
+    content: str = Field(min_length=1, max_length=2000)
 
 class CommentsOut(BaseModel):
     id: int

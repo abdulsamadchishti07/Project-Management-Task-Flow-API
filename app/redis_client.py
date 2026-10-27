@@ -38,24 +38,22 @@ def set_cached_json(key: str, data: Any, expire_seconds: int = 180):
         return
     try:
         serialized = json.dumps(data, default=str)
-        redis_client.setex(key, expire_seconds, serialized)
+        redis_client.set(key, serialized, ex=expire_seconds)
     except Exception as e:
         logger.warning(f"Redis cache write error on '{key}': {e}")
 
 
 def delete_cache_pattern(pattern: str):
     """
-    Non-blocking cache invalidation using SCAN instead of KEYS.
+    Non-blocking cache invalidation using scan_iter.
     Safe for production on large Redis keyspaces.
     """
     if not redis_client:
         return
     try:
-        cursor = "0"
-        while cursor != 0:
-            cursor, keys = redis_client.scan(cursor=cursor, match=pattern, count=100)
-            if keys:
-                redis_client.delete(*keys)
+        keys = list(redis_client.scan_iter(match=pattern, count=100))
+        if keys:
+            redis_client.delete(*keys)
     except Exception as e:
         logger.warning(f"Redis cache invalidation error for '{pattern}': {e}")
 
@@ -63,7 +61,7 @@ def delete_cache_pattern(pattern: str):
 class RateLimiter:
     """
     FastAPI Dependency for Rate Limiting.
-    Extracts client IP with X-Forwarded-For support for reverse proxies and Docker containers.
+    Extracts client IP securely and fails open with warnings if Redis is down.
     """
 
     def __init__(self, times: int, seconds: int, key_prefix: str = "rate_limit"):
@@ -73,16 +71,18 @@ class RateLimiter:
 
     def __call__(self, request: Request):
         if not redis_client:
-            return  # Gracefully pass if Redis is offline
+            logger.warning(f"Redis offline: skipping rate limiting on {request.url.path}")
+            return  # Fail-open policy if Redis is offline
 
-        # Support X-Forwarded-For behind reverse proxies / Docker load balancers
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            client_ip = forwarded_for.split(",")[0].strip()
-        elif request.client:
+        client_ip = "unknown"
+        if request.client:
             client_ip = request.client.host
-        else:
-            client_ip = "unknown"
+
+        # Only trust X-Forwarded-For when incoming direct peer is a trusted local proxy/container
+        if client_ip in ("127.0.0.1", "::1", "localhost", "testclient"):
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                client_ip = forwarded.split(",")[0].strip()
 
         endpoint = request.url.path
         key = f"{self.key_prefix}:{endpoint}:{client_ip}"
@@ -101,4 +101,4 @@ class RateLimiter:
         except HTTPException:
             raise
         except Exception as e:
-            logger.warning(f"Rate limiting check encountered an issue: {e}")
+            logger.warning(f"Rate limiting failed open due to Redis exception on {endpoint}: {e}")

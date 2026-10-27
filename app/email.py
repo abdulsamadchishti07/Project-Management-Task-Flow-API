@@ -1,13 +1,12 @@
+import html
+import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
-
 from email.mime.text import MIMEText
-import logging
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
-
 
 
 def send_email(to_email: str, subject: str, html_content: str):
@@ -28,11 +27,12 @@ def send_email(to_email: str, subject: str, html_content: str):
 
         logger.info(f"Email successfully sent to {to_email}")
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error(f"Failed to send email to {to_email} (Subject: '{subject}'): {e}", exc_info=True)
 
 
 def send_otp_email(to_email: str, otp: str):
     """HTML template for Account Verification OTP."""
+    safe_otp = html.escape(str(otp))
     subject = "Verify your TaskFlow Account - Verification Code"
     html_content = f"""
     <!DOCTYPE html>
@@ -60,7 +60,7 @@ def send_otp_email(to_email: str, otp: str):
                 <p>Thank you for signing up with TaskFlow! To complete your registration and activate your account, please enter the following 6-digit verification code:</p>
                 
                 <div class="otp-box">
-                    <p class="otp-code">{otp}</p>
+                    <p class="otp-code">{safe_otp}</p>
                 </div>
 
                 <p>This code will expire in <strong>10 minutes</strong>. If you did not create an account on TaskFlow, you can safely ignore this email.</p>
@@ -77,7 +77,10 @@ def send_otp_email(to_email: str, otp: str):
 
 def send_invitation_email(to_email: str, workspace_name: str, role: str, inviter_name: str):
     """HTML template for Workspace Invitation."""
-    subject = f"You've been invited to join '{workspace_name}' on TaskFlow"
+    safe_ws_name = html.escape(str(workspace_name))
+    safe_role = html.escape(str(role))
+    safe_inviter = html.escape(str(inviter_name))
+    subject = f"You've been invited to join '{safe_ws_name}' on TaskFlow"
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -100,11 +103,11 @@ def send_invitation_email(to_email: str, workspace_name: str, role: str, inviter
             </div>
             <div class="content">
                 <p>Hello,</p>
-                <p><strong>{inviter_name}</strong> has invited you to collaborate on TaskFlow!</p>
+                <p><strong>{safe_inviter}</strong> has invited you to collaborate on TaskFlow!</p>
                 
                 <div class="highlight-box">
-                    <p style="margin: 0;"><strong>Workspace:</strong> {workspace_name}</p>
-                    <p style="margin: 5px 0 0 0;"><strong>Assigned Role:</strong> {role.capitalize()}</p>
+                    <p style="margin: 0;"><strong>Workspace:</strong> {safe_ws_name}</p>
+                    <p style="margin: 5px 0 0 0;"><strong>Assigned Role:</strong> {safe_role.capitalize()}</p>
                 </div>
 
                 <p>Log in to your TaskFlow account to accept this invitation and start working with your team.</p>
