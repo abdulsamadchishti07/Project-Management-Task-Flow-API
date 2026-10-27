@@ -7,7 +7,7 @@ from ..database import get_db
 from typing import Annotated
 from datetime import datetime, timedelta, timezone
 
-import random
+import secrets
 from ..redis_client import RateLimiter
 
 
@@ -23,7 +23,8 @@ def create_user(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    existing_email = db.query(model.Users).filter(model.Users.email == user.email).first()
+    clean_email = user.email.strip().lower()
+    existing_email = db.query(model.Users).filter(model.Users.email == clean_email).first()
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -32,17 +33,18 @@ def create_user(
 
     hashed_password = utils.hash(user.password)
 
-    # Generate 6-digit OTP with 10-minute expiry
-    otp = f"{random.randint(100000, 999999)}"
+    # Generate cryptographically secure 6-digit OTP with 10-minute expiry
+    otp = f"{secrets.randbelow(900000) + 100000}"
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
     new_user = model.Users(
-        email=user.email,
-        name=user.name,
+        email=clean_email,
+        name=user.name.strip(),
         password=hashed_password,
         active=False,
         verification_otp=otp,
-        otp_expires_at=expires_at
+        otp_expires_at=expires_at,
+        token_version=1
     )
 
     db.add(new_user)
@@ -55,12 +57,25 @@ def create_user(
     return new_user
 
 
-@router.post("/verify-otp", response_model=schema.MessageResponse)
+@router.post(
+    "/verify-otp",
+    response_model=schema.MessageResponse,
+    dependencies=[
+        Depends(
+            RateLimiter(
+                times=5,
+                seconds=300,
+                key_prefix="rate_verify_otp"
+            )
+        )
+    ]
+)
 def verify_otp(
     payload: schema.VerifyOTP,
     db: Session = Depends(get_db)
 ):
-    user = db.query(model.Users).filter(model.Users.email == payload.email).first()
+    clean_email = payload.email.strip().lower()
+    user = db.query(model.Users).filter(model.Users.email == clean_email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -112,7 +127,8 @@ def resend_otp(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    user = db.query(model.Users).filter(model.Users.email == payload.email).first()
+    clean_email = payload.email.strip().lower()
+    user = db.query(model.Users).filter(model.Users.email == clean_email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -125,7 +141,7 @@ def resend_otp(
             detail="Account is already verified and active."
         )
 
-    otp = f"{random.randint(100000, 999999)}"
+    otp = f"{secrets.randbelow(900000) + 100000}"
     user.verification_otp = otp
     user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     db.commit()
@@ -192,7 +208,7 @@ def get_user(
 @router.put("/{id}", response_model=schema.UserOut)
 def update_user(
     id: int,
-    user_update: schema.UserCreate,
+    user_update: schema.UserUpdate,
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
@@ -211,22 +227,17 @@ def update_user(
             detail="You are not allowed to perform this Action."
         )
 
-    #  Check if new email is already taken by another user or not
-    if user_update.email != user.email:
-        email_taken = db.query(model.Users).filter(model.Users.email == user_update.email).first()
-        if email_taken:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Email {user_update.email} is already in use by another account."
-            )
+    update_data = {}
+    if user_update.name is not None:
+        update_data["name"] = user_update.name.strip()
+    if user_update.password is not None:
+        update_data["password"] = utils.hash(user_update.password)
+        update_data["token_version"] = (user.token_version or 1) + 1
 
-    # Hash the new password before saving
-    update_data = user_update.model_dump()
-    update_data["password"] = utils.hash(update_data["password"])
-
-    user_query.update(update_data, synchronize_session=False)
-    db.commit()
-    db.refresh(user)
+    if update_data:
+        user_query.update(update_data, synchronize_session=False)
+        db.commit()
+        db.refresh(user)
     return user
 
 
@@ -247,6 +258,10 @@ def delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to perform this Action."
         )
-    db.delete(user)
+    # Soft deactivation preserves workspace ownership and audit log history
+    user.active = False
+    user.token_version = (user.token_version or 1) + 1
+    user.verification_otp = None
+    user.otp_expires_at = None
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

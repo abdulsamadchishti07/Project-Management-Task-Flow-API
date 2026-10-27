@@ -29,8 +29,7 @@ def create_workspace(
         owner_id=current_user.id
     )
     db.add(new_workspace)
-    db.commit()
-    db.refresh(new_workspace)
+    db.flush()
 
     # Automatically add the creator as an 'Owner' member
     member = model.WorkspaceMember(
@@ -39,7 +38,6 @@ def create_workspace(
         role=Role.OWNER.value
     )
     db.add(member)
-    db.commit()
 
     # Log Audit Activity
     log_activity(
@@ -51,6 +49,8 @@ def create_workspace(
         entity_id=new_workspace.id,
         details=f"Created workspace '{new_workspace.name}'"
     )
+    db.commit()
+    db.refresh(new_workspace)
 
     return new_workspace
 
@@ -58,7 +58,9 @@ def create_workspace(
 @router.get("/", response_model=list[schema.WorkspaceOut])
 def get_my_workspaces(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0)
 ):
     """Retrieves all active (non-deleted) workspaces the current user owns or is a member of."""
     member_workspace_ids = [
@@ -73,7 +75,7 @@ def get_my_workspaces(
             model.Workspace.owner_id == current_user.id,
             model.Workspace.id.in_(member_workspace_ids)
         )
-    ).all()
+    ).order_by(model.Workspace.created_at.desc(), model.Workspace.id.desc()).limit(limit).offset(offset).all()
 
     return workspaces
 
@@ -121,8 +123,6 @@ def update_workspace(
 
     old_name = workspace.name
     workspace_query.update(workspace_data.model_dump(), synchronize_session=False)
-    db.commit()
-    db.refresh(workspace)
 
     # Log Audit Activity
     log_activity(
@@ -132,8 +132,10 @@ def update_workspace(
         action="WORKSPACE_UPDATED",
         entity_type="workspace",
         entity_id=workspace_id,
-        details=f"Renamed workspace from '{old_name}' to '{workspace.name}'"
+        details=f"Renamed workspace from '{old_name}' to '{workspace_data.name}'"
     )
+    db.commit()
+    db.refresh(workspace)
 
     return workspace
 
@@ -159,7 +161,6 @@ def delete_workspace(
 
     workspace.is_deleted = True
     workspace.deleted_at = datetime.now(timezone.utc)
-    db.commit()
 
     # Log Audit Activity
     log_activity(
@@ -171,6 +172,7 @@ def delete_workspace(
         entity_id=workspace_id,
         details=f"Soft deleted workspace '{workspace.name}'"
     )
+    db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

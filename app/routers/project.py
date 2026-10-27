@@ -1,7 +1,7 @@
 from typing import Annotated
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, status, HTTPException, Response
+from fastapi import APIRouter, Depends, status, HTTPException, Response, Query
 from sqlalchemy.orm import Session
 
 from sqlalchemy import or_
@@ -37,8 +37,7 @@ def create_project(
     )
 
     db.add(new_project)
-    db.commit()
-    db.refresh(new_project)
+    db.flush()
 
     # Automatically add the creator as an 'Admin' in the project
     member = model.ProjectMember(
@@ -47,12 +46,11 @@ def create_project(
         role=Role.ADMIN.value
     )
     db.add(member)
-    db.commit()
 
     # Invalidate workspace projects cache
     delete_cache_pattern(f"projects:ws:{workspace_id}:*")
 
-    # Log Audit Activity
+    # Log Audit Activity atomically
     log_activity(
         db=db,
         workspace_id=workspace_id,
@@ -62,6 +60,8 @@ def create_project(
         entity_id=new_project.id,
         details=f"Created project '{new_project.name}' (private={new_project.private})"
     )
+    db.commit()
+    db.refresh(new_project)
 
     return new_project
 
@@ -71,10 +71,12 @@ def get_workspace_projects(
     workspace_id: int,
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.VIEWER))],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0)
 ):
     """Requires at least VIEWER role in the workspace. Cached in Redis."""
-    cache_key = f"projects:ws:{workspace_id}:user:{current_user.id}"
+    cache_key = f"projects:ws:{workspace_id}:user:{current_user.id}:lim:{limit}:off:{offset}"
     cached_data = get_cached_json(cache_key)
     if cached_data is not None:
         return cached_data
@@ -86,7 +88,7 @@ def get_workspace_projects(
         ).all()
     ]
 
-    # Return active (non-deleted) projects
+    # Return active (non-deleted) projects with deterministic ordering
     projects = db.query(model.Project).filter(
         model.Project.workspace_id == workspace_id,
         model.Project.is_deleted == False,
@@ -95,7 +97,7 @@ def get_workspace_projects(
             model.Project.owner_id == current_user.id,
             model.Project.id.in_(member_project_ids)
         )
-    ).all()
+    ).order_by(model.Project.created_at.desc(), model.Project.id.desc()).limit(limit).offset(offset).all()
 
     # Serialize & store in Redis (3-minute TTL)
     serialized = [schema.ProjectOut.model_validate(p).model_dump() for p in projects]
@@ -121,14 +123,23 @@ def get_project(
             detail=f"Project with id {id} not found"
         )
 
+    # Verify parent workspace is active
+    workspace = db.query(model.Workspace).filter(
+        model.Workspace.id == project.workspace_id,
+        model.Workspace.is_deleted == False
+    ).first()
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent workspace not found"
+        )
+
     # Verify user has at least VIEWER role in the parent workspace
     ws_membership = db.query(model.WorkspaceMember).filter(
         model.WorkspaceMember.workspace_id == project.workspace_id,
         model.WorkspaceMember.user_id == current_user.id
     ).first()
-
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == project.workspace_id).first()
-    is_ws_owner = workspace and workspace.owner_id == current_user.id
+    is_ws_owner = workspace.owner_id == current_user.id
 
     if not ws_membership and not is_ws_owner:
         raise HTTPException(
@@ -171,17 +182,33 @@ def update_project(
             detail=f"Project with id {id} not found"
         )
 
-    # Allow update if user is project owner OR workspace admin/owner
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == project.workspace_id).first()
-    is_ws_owner = workspace and workspace.owner_id == current_user.id
+    # Verify parent workspace is active
+    workspace = db.query(model.Workspace).filter(
+        model.Workspace.id == project.workspace_id,
+        model.Workspace.is_deleted == False
+    ).first()
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent workspace not found"
+        )
 
+    is_ws_owner = workspace.owner_id == current_user.id
     ws_member = db.query(model.WorkspaceMember).filter(
         model.WorkspaceMember.workspace_id == project.workspace_id,
         model.WorkspaceMember.user_id == current_user.id
     ).first()
     is_ws_admin = ws_member and has_sufficient_role(ws_member.role, Role.ADMIN)
 
-    if project.owner_id != current_user.id and not is_ws_owner and not is_ws_admin:
+    # Check project-level admin / ownership
+    proj_member = db.query(model.ProjectMember).filter(
+        model.ProjectMember.project_id == project.id,
+        model.ProjectMember.user_id == current_user.id
+    ).first()
+    is_project_admin = proj_member and proj_member.role == Role.ADMIN.value
+    is_project_owner = project.owner_id == current_user.id
+
+    if not is_project_owner and not is_project_admin and not is_ws_owner and not is_ws_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to update this project"
@@ -191,13 +218,8 @@ def update_project(
     update_dict = project_data.model_dump(exclude_unset=True)
     if update_dict:
         project_query.update(update_dict, synchronize_session=False)
-        db.commit()
-        db.refresh(project)
 
-        # Invalidate cache for this workspace
-        delete_cache_pattern(f"projects:ws:{project.workspace_id}:*")
-
-        # Log Audit Activity
+        # Log Audit Activity atomically
         log_activity(
             db=db,
             workspace_id=project.workspace_id,
@@ -207,6 +229,11 @@ def update_project(
             entity_id=project.id,
             details=f"Updated project '{old_name}'"
         )
+        db.commit()
+        db.refresh(project)
+
+        # Invalidate cache for this workspace
+        delete_cache_pattern(f"projects:ws:{project.workspace_id}:*")
 
     return project
 
@@ -230,7 +257,10 @@ def delete_project(
         )
 
     # Allow delete if user is project owner OR workspace admin/owner
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == project.workspace_id).first()
+    workspace = db.query(model.Workspace).filter(
+        model.Workspace.id == project.workspace_id,
+        model.Workspace.is_deleted == False
+    ).first()
     is_ws_owner = workspace and workspace.owner_id == current_user.id
 
     ws_member = db.query(model.WorkspaceMember).filter(
@@ -251,12 +281,8 @@ def delete_project(
     # Soft Delete
     project.is_deleted = True
     project.deleted_at = datetime.now(timezone.utc)
-    db.commit()
 
-    # Invalidate cache for this workspace
-    delete_cache_pattern(f"projects:ws:{workspace_id}:*")
-
-    # Log Audit Activity
+    # Log Audit Activity atomically
     log_activity(
         db=db,
         workspace_id=workspace_id,
@@ -266,5 +292,9 @@ def delete_project(
         entity_id=id,
         details=f"Soft deleted project '{project_title}'"
     )
+    db.commit()
+
+    # Invalidate cache for this workspace
+    delete_cache_pattern(f"projects:ws:{workspace_id}:*")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
